@@ -16,6 +16,7 @@ data/
 
 # Docs (as requested by user)
 docs/
+.superpowers/
 
 # OS artifacts
 .DS_Store
