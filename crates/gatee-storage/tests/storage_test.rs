@@ -49,7 +49,7 @@ async fn test_storage_file_path() {
 
     let logs = storage.fetch_recent_logs(5).await.expect("fetch logs");
     assert_eq!(logs.len(), 1);
-    assert_eq!(logs[0].is_mitm, true);
+    assert!(logs[0].is_mitm);
     assert_eq!(logs[0].target_host, "api.openai.com:443");
 }
 

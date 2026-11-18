@@ -4,3 +4,15 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+
+[dependencies]
+gatee-core = { path = "../gatee-core" }
+gatee-config = { path = "../gatee-config" }
+tokio.workspace = true
+tokio-util.workspace = true
+reqwest.workspace = true
+bytes.workspace = true
+http.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+base64.workspace = true
