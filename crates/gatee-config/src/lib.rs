@@ -30,11 +30,18 @@ impl Config {
         if self.upstreams.is_empty() {
             return Err(ConfigError::Validation("No upstreams defined".to_string()));
         }
+        let mut upstream_names = std::collections::HashSet::new();
         for u in &self.upstreams {
             if u.name.trim().is_empty() {
                 return Err(ConfigError::Validation(
                     "Upstream with empty name".to_string(),
                 ));
+            }
+            if !upstream_names.insert(&u.name) {
+                return Err(ConfigError::Validation(format!(
+                    "Duplicate upstream name '{}'",
+                    u.name
+                )));
             }
             if u.kind != UpstreamKind::Direct && u.url.trim().is_empty() {
                 return Err(ConfigError::Validation(format!(
@@ -46,8 +53,6 @@ impl Config {
         if self.pools.is_empty() {
             return Err(ConfigError::Validation("No pools defined".to_string()));
         }
-        let upstream_names: std::collections::HashSet<_> =
-            self.upstreams.iter().map(|u| u.name.as_str()).collect();
         for (pool_name, pool) in &self.pools {
             if pool.members.is_empty() {
                 return Err(ConfigError::Validation(format!(
@@ -56,7 +61,7 @@ impl Config {
                 )));
             }
             for member in &pool.members {
-                if !upstream_names.contains(member.as_str()) {
+                if !upstream_names.contains(&member) {
                     return Err(ConfigError::Validation(format!(
                         "Pool '{}' references unknown member '{}'",
                         pool_name, member

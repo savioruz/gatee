@@ -12,6 +12,15 @@ fn test_ca_generation_and_leaf_signing() {
     assert!(key_path.exists());
     assert!(ca.cert_pem().contains("BEGIN CERTIFICATE"));
 
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::metadata(&key_path)
+            .expect("metadata")
+            .permissions();
+        assert_eq!(perms.mode() & 0o777, 0o600);
+    }
+
     let config = ca
         .server_config_for("api.openai.com")
         .expect("leaf signing");

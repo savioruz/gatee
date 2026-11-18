@@ -478,6 +478,38 @@ async fn test_dial_socks5_proxy_ipv4_and_ipv6() {
         .await
         .unwrap();
     server_task_v6.await.unwrap();
+
+    // Bracketed IPv6 test
+    let listener_bracketed = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_addr_bracketed = listener_bracketed.local_addr().unwrap();
+
+    let server_task_bracketed = tokio::spawn(async move {
+        let (mut socket, _) = listener_bracketed.accept().await.unwrap();
+        let mut greeting = [0u8; 3];
+        socket.read_exact(&mut greeting).await.unwrap();
+        socket.write_all(&[5, 0]).await.unwrap();
+
+        // Read connect: [5, 1, 0, 4 (IPv6 ATYP), 16 bytes IP, 2 bytes port]
+        let mut req = [0u8; 22];
+        socket.read_exact(&mut req).await.unwrap();
+        assert_eq!(&req[..4], &[5, 1, 0, 4]);
+        assert_eq!(
+            &req[4..20],
+            &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+        ); // ::1
+        assert_eq!(&req[20..22], &8080u16.to_be_bytes());
+
+        let mut reply = vec![5, 0, 0, 4];
+        reply.extend_from_slice(&[0u8; 16]);
+        reply.extend_from_slice(&[0, 0]);
+        socket.write_all(&reply).await.unwrap();
+    });
+
+    let _client_bracketed =
+        dial_socks5_proxy(&proxy_addr_bracketed.to_string(), "[::1]", 8080, None)
+            .await
+            .unwrap();
+    server_task_bracketed.await.unwrap();
 }
 
 #[tokio::test]
@@ -585,6 +617,43 @@ async fn test_dial_upstream_socks5() {
     });
 
     let res = dial_upstream(&upstream, "my-target.com:443").await;
+    assert!(res.is_ok());
+}
+
+#[tokio::test]
+async fn test_dial_upstream_socks5_bracketed_ipv6() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut greeting = [0u8; 3];
+        socket.read_exact(&mut greeting).await.unwrap();
+        socket.write_all(&[5, 0]).await.unwrap();
+
+        // Expect IPv6 ATYP 4
+        let mut req = [0u8; 22];
+        socket.read_exact(&mut req).await.unwrap();
+        assert_eq!(&req[..4], &[5, 1, 0, 4]);
+        assert_eq!(
+            &req[4..20],
+            &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+        ); // ::1
+        assert_eq!(&req[20..22], &8080u16.to_be_bytes());
+
+        socket
+            .write_all(&[5, 0, 0, 1, 127, 0, 0, 1, 0, 0])
+            .await
+            .unwrap();
+    });
+
+    let upstream = UpstreamRuntime::new(UpstreamCfg {
+        name: "test-socks5-upstream".to_string(),
+        kind: UpstreamKind::Socks5,
+        url: format!("socks5://{}", proxy_addr),
+    });
+
+    let res = dial_upstream(&upstream, "[::1]:8080").await;
     assert!(res.is_ok());
 }
 

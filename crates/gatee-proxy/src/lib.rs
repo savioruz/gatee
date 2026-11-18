@@ -37,11 +37,14 @@ pub async fn dial_upstream(
         gatee_config::UpstreamKind::Socks5 => {
             let (host, port) = match target_addr.rsplit_once(':') {
                 Some((h, p)) => (
-                    h,
+                    h.trim_start_matches('[').trim_end_matches(']'),
                     p.parse::<u16>()
                         .map_err(|e| ProxyError::Config(e.to_string()))?,
                 ),
-                None => (target_addr, 80),
+                None => (
+                    target_addr.trim_start_matches('[').trim_end_matches(']'),
+                    80,
+                ),
             };
             let stream = dial_socks5_proxy(upstream.url(), host, port, None).await?;
             Ok(stream)

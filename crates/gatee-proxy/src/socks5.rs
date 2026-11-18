@@ -99,7 +99,8 @@ pub async fn dial_socks5_proxy(
 
     // Connect request: RFC 1928 Section 4
     let mut req = vec![5, 1, 0]; // VER=5, CMD=1 (CONNECT), RSV=0
-    if let Ok(ip) = target_host.parse::<std::net::IpAddr>() {
+    let clean_host = target_host.trim_start_matches('[').trim_end_matches(']');
+    if let Ok(ip) = clean_host.parse::<std::net::IpAddr>() {
         match ip {
             std::net::IpAddr::V4(v4) => {
                 req.push(1); // ATYP 1 = IPv4

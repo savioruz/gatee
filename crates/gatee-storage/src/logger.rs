@@ -25,6 +25,8 @@ impl LogEmitter {
     }
 
     pub fn record(&self, entry: RequestLogEntry) {
-        let _ = self.sender.try_send(entry);
+        if let Err(e) = self.sender.try_send(entry) {
+            tracing::warn!("Request log dropped: {}", e);
+        }
     }
 }

@@ -73,6 +73,11 @@ impl CertificateAuthority {
         }
         std::fs::write(cp, &cert_pem)?;
         std::fs::write(kp, &key_pem)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(kp, std::fs::Permissions::from_mode(0o600))?;
+        }
 
         Ok(Self {
             ca_cert_pem: cert_pem,

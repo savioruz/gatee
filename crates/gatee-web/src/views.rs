@@ -132,7 +132,7 @@ pub fn dashboard_page(state: &GatewayState, recent_logs: &[RequestLogEntry]) -> 
                                 td { (log.upstream) }
                                 td { (log.latency_ms) " ms" }
                                 td {
-                                    @if log.status_code == 200 {
+                                    @if (200..300).contains(&log.status_code) {
                                         span class="badge badge-green" { (log.status_code) }
                                     } @else {
                                         span class="badge badge-red" { (log.status_code) }

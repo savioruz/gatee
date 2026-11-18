@@ -80,3 +80,30 @@ async fn test_log_emitter() {
     assert_eq!(logs.len(), 1);
     assert_eq!(logs[0].target_host, "example.com:80");
 }
+
+#[tokio::test]
+async fn test_log_emitter_channel_saturation() {
+    let storage = Storage::new_in_memory()
+        .await
+        .expect("init in-memory storage");
+    // Small buffer of 1 to easily trigger channel saturation
+    let emitter = LogEmitter::new(storage.clone(), 1);
+
+    for i in 0..50 {
+        emitter.record(RequestLogEntry {
+            id: None,
+            timestamp: Utc::now(),
+            client_ip: "127.0.0.1".to_string(),
+            pool: "default".to_string(),
+            upstream: "direct".to_string(),
+            target_host: format!("target-{}.com:80", i),
+            is_mitm: false,
+            status_code: 200,
+            latency_ms: 10,
+        });
+    }
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+    let logs = storage.fetch_recent_logs(100).await.expect("fetch logs");
+    assert!(!logs.is_empty());
+}

@@ -302,3 +302,401 @@ async fn test_connect_failover_marks_down() {
     let dead_upstream = state.upstreams.get("dead-proxy").unwrap();
     assert!(dead_upstream.is_down(chrono::Utc::now().timestamp()));
 }
+
+#[tokio::test]
+async fn test_blind_tunnel_all_upstreams_fail_logs_502() {
+    let dir = tempdir().expect("tempdir");
+    let cert_path = dir.path().join("ca.pem");
+    let key_path = dir.path().join("ca-key.pem");
+    let ca = Arc::new(CertificateAuthority::load_or_generate(&cert_path, &key_path).expect("ca"));
+    let storage = Storage::new_in_memory().await.expect("storage");
+    let logger = LogEmitter::new(storage.clone(), 64);
+
+    let upstreams = vec![UpstreamCfg {
+        name: "dead-http".to_string(),
+        kind: UpstreamKind::Http,
+        url: "http://127.0.0.1:1".to_string(),
+    }];
+
+    let mut pools = HashMap::new();
+    pools.insert(
+        "default".to_string(),
+        PoolCfg {
+            members: vec!["dead-http".to_string()],
+            strategy: PoolStrategy::Failover,
+            mitm_hosts: vec![],
+            cooldown_secs: 60,
+        },
+    );
+
+    let config = Config {
+        listen: "127.0.0.1:0".to_string(),
+        password: "secret".to_string(),
+        ca_cert: cert_path.to_string_lossy().to_string(),
+        ca_key: key_path.to_string_lossy().to_string(),
+        upstreams,
+        pools,
+    };
+
+    let state = Arc::new(GatewayState::new(config));
+    let web_router = build_web_router(Arc::clone(&state), storage.clone(), Arc::clone(&ca));
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let server_addr = listener.local_addr().expect("local_addr");
+
+    let server_state = Arc::clone(&state);
+    let server_ca = Arc::clone(&ca);
+    tokio::spawn(async move {
+        let _ = run_server(listener, server_state, server_ca, web_router, logger).await;
+    });
+
+    let mut client = TcpStream::connect(server_addr).await.expect("connect");
+    let auth = base64::prelude::BASE64_STANDARD.encode("default:secret");
+    let req = format!(
+        "CONNECT target.example.com:443 HTTP/1.1\r\nHost: target.example.com:443\r\nProxy-Authorization: Basic {}\r\n\r\n",
+        auth
+    );
+    client.write_all(req.as_bytes()).await.expect("write");
+
+    let mut buf = [0u8; 512];
+    let n = client.read(&mut buf).await.expect("read");
+    let resp = String::from_utf8_lossy(&buf[..n]);
+    assert!(resp.starts_with("HTTP/1.1 200 OK"));
+
+    // Allow time for dialing failure and logger emission
+    tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+
+    let logs = storage.fetch_recent_logs(10).await.expect("logs");
+    assert!(!logs.is_empty(), "Expected a log entry");
+    let log = &logs[0];
+    assert_eq!(log.status_code, 502);
+    assert!(!log.is_mitm);
+    assert_eq!(log.upstream, "dead-http");
+}
+
+fn pem_to_der(pem: &str) -> Vec<u8> {
+    let b64: String = pem.lines().filter(|l| !l.starts_with("---")).collect();
+    base64::prelude::BASE64_STANDARD
+        .decode(b64)
+        .expect("decode pem")
+}
+
+fn create_tls_connector(ca_pem: &str) -> tokio_rustls::TlsConnector {
+    let der = pem_to_der(ca_pem);
+    let mut root_store = tokio_rustls::rustls::RootCertStore::empty();
+    root_store
+        .add(tokio_rustls::rustls::pki_types::CertificateDer::from(der))
+        .expect("add ca to root store");
+    let client_config = tokio_rustls::rustls::ClientConfig::builder()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+    tokio_rustls::TlsConnector::from(Arc::new(client_config))
+}
+
+#[tokio::test]
+async fn test_mitm_upgrade_websocket_returns_501() {
+    let dir = tempdir().expect("tempdir");
+    let cert_path = dir.path().join("ca.pem");
+    let key_path = dir.path().join("ca-key.pem");
+    let ca = Arc::new(CertificateAuthority::load_or_generate(&cert_path, &key_path).expect("ca"));
+    let storage = Storage::new_in_memory().await.expect("storage");
+    let logger = LogEmitter::new(storage.clone(), 64);
+
+    let upstreams = vec![UpstreamCfg {
+        name: "vercel-relay".to_string(),
+        kind: UpstreamKind::Vercel,
+        url: "http://127.0.0.1:12345".to_string(),
+    }];
+
+    let mut pools = HashMap::new();
+    pools.insert(
+        "default".to_string(),
+        PoolCfg {
+            members: vec!["vercel-relay".to_string()],
+            strategy: PoolStrategy::Failover,
+            mitm_hosts: vec!["mitm.example.com".to_string()],
+            cooldown_secs: 30,
+        },
+    );
+
+    let config = Config {
+        listen: "127.0.0.1:0".to_string(),
+        password: "secret".to_string(),
+        ca_cert: cert_path.to_string_lossy().to_string(),
+        ca_key: key_path.to_string_lossy().to_string(),
+        upstreams,
+        pools,
+    };
+
+    let state = Arc::new(GatewayState::new(config));
+    let web_router = build_web_router(Arc::clone(&state), storage.clone(), Arc::clone(&ca));
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let server_addr = listener.local_addr().expect("local_addr");
+
+    let server_state = Arc::clone(&state);
+    let server_ca = Arc::clone(&ca);
+    tokio::spawn(async move {
+        let _ = run_server(listener, server_state, server_ca, web_router, logger).await;
+    });
+
+    let mut client = TcpStream::connect(server_addr).await.expect("connect");
+    let auth = base64::prelude::BASE64_STANDARD.encode("default:secret");
+    let req = format!(
+        "CONNECT mitm.example.com:443 HTTP/1.1\r\nHost: mitm.example.com:443\r\nProxy-Authorization: Basic {}\r\n\r\n",
+        auth
+    );
+    client.write_all(req.as_bytes()).await.expect("write");
+
+    let mut buf = [0u8; 512];
+    let n = client.read(&mut buf).await.expect("read");
+    let resp = String::from_utf8_lossy(&buf[..n]);
+    assert!(resp.starts_with("HTTP/1.1 200 OK"));
+
+    // Handshake TLS over the established tunnel
+    let connector = create_tls_connector(ca.cert_pem());
+    let server_name =
+        tokio_rustls::rustls::pki_types::ServerName::try_from("mitm.example.com".to_string())
+            .unwrap();
+    let mut tls_stream = connector.connect(server_name, client).await.expect("tls");
+
+    // Send HTTP request with Upgrade: websocket header
+    let ws_req = "GET /ws HTTP/1.1\r\nHost: mitm.example.com\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n";
+    tls_stream
+        .write_all(ws_req.as_bytes())
+        .await
+        .expect("write ws");
+
+    let mut ws_resp = [0u8; 1024];
+    let n = tls_stream.read(&mut ws_resp).await.expect("read ws");
+    let resp_str = String::from_utf8_lossy(&ws_resp[..n]);
+    assert!(resp_str.starts_with("HTTP/1.1 501 Not Implemented"));
+    assert!(resp_str.contains("WebSocket is not supported over Vercel relay"));
+}
+
+#[tokio::test]
+async fn test_mitm_relay_failure_logs_502() {
+    let dir = tempdir().expect("tempdir");
+    let cert_path = dir.path().join("ca.pem");
+    let key_path = dir.path().join("ca-key.pem");
+    let ca = Arc::new(CertificateAuthority::load_or_generate(&cert_path, &key_path).expect("ca"));
+    let storage = Storage::new_in_memory().await.expect("storage");
+    let logger = LogEmitter::new(storage.clone(), 64);
+
+    let upstreams = vec![UpstreamCfg {
+        name: "dead-relay".to_string(),
+        kind: UpstreamKind::Vercel,
+        url: "http://127.0.0.1:1".to_string(),
+    }];
+
+    let mut pools = HashMap::new();
+    pools.insert(
+        "default".to_string(),
+        PoolCfg {
+            members: vec!["dead-relay".to_string()],
+            strategy: PoolStrategy::Failover,
+            mitm_hosts: vec!["api.openai.com".to_string()],
+            cooldown_secs: 30,
+        },
+    );
+
+    let config = Config {
+        listen: "127.0.0.1:0".to_string(),
+        password: "secret".to_string(),
+        ca_cert: cert_path.to_string_lossy().to_string(),
+        ca_key: key_path.to_string_lossy().to_string(),
+        upstreams,
+        pools,
+    };
+
+    let state = Arc::new(GatewayState::new(config));
+    let web_router = build_web_router(Arc::clone(&state), storage.clone(), Arc::clone(&ca));
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let server_addr = listener.local_addr().expect("local_addr");
+
+    let server_state = Arc::clone(&state);
+    let server_ca = Arc::clone(&ca);
+    tokio::spawn(async move {
+        let _ = run_server(listener, server_state, server_ca, web_router, logger).await;
+    });
+
+    let mut client = TcpStream::connect(server_addr).await.expect("connect");
+    let auth = base64::prelude::BASE64_STANDARD.encode("default:secret");
+    let req = format!(
+        "CONNECT api.openai.com:443 HTTP/1.1\r\nHost: api.openai.com:443\r\nProxy-Authorization: Basic {}\r\n\r\n",
+        auth
+    );
+    client.write_all(req.as_bytes()).await.expect("write");
+
+    let mut buf = [0u8; 512];
+    let n = client.read(&mut buf).await.expect("read");
+    let resp = String::from_utf8_lossy(&buf[..n]);
+    assert!(resp.starts_with("HTTP/1.1 200 OK"));
+
+    // TLS Handshake
+    let connector = create_tls_connector(ca.cert_pem());
+    let server_name =
+        tokio_rustls::rustls::pki_types::ServerName::try_from("api.openai.com".to_string())
+            .unwrap();
+    let mut tls_stream = connector.connect(server_name, client).await.expect("tls");
+
+    // Send HTTP request to dead relay
+    let http_req = "GET /v1/models HTTP/1.1\r\nHost: api.openai.com\r\nConnection: close\r\n\r\n";
+    tls_stream
+        .write_all(http_req.as_bytes())
+        .await
+        .expect("write http");
+
+    let mut http_resp = [0u8; 1024];
+    let n = tls_stream.read(&mut http_resp).await.expect("read resp");
+    let resp_str = String::from_utf8_lossy(&http_resp[..n]);
+    assert!(resp_str.starts_with("HTTP/1.1 502 Bad Gateway"));
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let logs = storage.fetch_recent_logs(10).await.expect("fetch logs");
+    assert!(!logs.is_empty());
+    let log = &logs[0];
+    assert_eq!(log.status_code, 502);
+    assert!(log.is_mitm);
+    assert_eq!(log.target_host, "api.openai.com");
+    assert_eq!(log.upstream, "dead-relay");
+}
+
+#[tokio::test]
+async fn test_mitm_per_request_latency() {
+    // Start mock relay
+    let mock_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mock_addr = mock_listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = match mock_listener.accept().await {
+                Ok(conn) => conn,
+                Err(_) => break,
+            };
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                while let Ok(n) = socket.read(&mut buf).await {
+                    if n == 0 {
+                        break;
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_millis(60)).await;
+                    let resp =
+                        "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: keep-alive\r\n\r\nok";
+                    if socket.write_all(resp.as_bytes()).await.is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+    });
+
+    let dir = tempdir().expect("tempdir");
+    let cert_path = dir.path().join("ca.pem");
+    let key_path = dir.path().join("ca-key.pem");
+    let ca = Arc::new(CertificateAuthority::load_or_generate(&cert_path, &key_path).expect("ca"));
+    let storage = Storage::new_in_memory().await.expect("storage");
+    let logger = LogEmitter::new(storage.clone(), 64);
+
+    let upstreams = vec![UpstreamCfg {
+        name: "live-relay".to_string(),
+        kind: UpstreamKind::Vercel,
+        url: format!("http://{}", mock_addr),
+    }];
+
+    let mut pools = HashMap::new();
+    pools.insert(
+        "default".to_string(),
+        PoolCfg {
+            members: vec!["live-relay".to_string()],
+            strategy: PoolStrategy::Failover,
+            mitm_hosts: vec!["api.openai.com".to_string()],
+            cooldown_secs: 30,
+        },
+    );
+
+    let config = Config {
+        listen: "127.0.0.1:0".to_string(),
+        password: "secret".to_string(),
+        ca_cert: cert_path.to_string_lossy().to_string(),
+        ca_key: key_path.to_string_lossy().to_string(),
+        upstreams,
+        pools,
+    };
+
+    let state = Arc::new(GatewayState::new(config));
+    let web_router = build_web_router(Arc::clone(&state), storage.clone(), Arc::clone(&ca));
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let server_addr = listener.local_addr().expect("local_addr");
+
+    let server_state = Arc::clone(&state);
+    let server_ca = Arc::clone(&ca);
+    tokio::spawn(async move {
+        let _ = run_server(listener, server_state, server_ca, web_router, logger).await;
+    });
+
+    let mut client = TcpStream::connect(server_addr).await.expect("connect");
+    let auth = base64::prelude::BASE64_STANDARD.encode("default:secret");
+    let req = format!(
+        "CONNECT api.openai.com:443 HTTP/1.1\r\nHost: api.openai.com:443\r\nProxy-Authorization: Basic {}\r\n\r\n",
+        auth
+    );
+    client.write_all(req.as_bytes()).await.expect("write");
+
+    let mut buf = [0u8; 512];
+    let n = client.read(&mut buf).await.expect("read");
+    assert!(String::from_utf8_lossy(&buf[..n]).starts_with("HTTP/1.1 200 OK"));
+
+    // TLS Handshake
+    let connector = create_tls_connector(ca.cert_pem());
+    let server_name =
+        tokio_rustls::rustls::pki_types::ServerName::try_from("api.openai.com".to_string())
+            .unwrap();
+    let mut tls_stream = connector.connect(server_name, client).await.expect("tls");
+
+    // Request 1
+    let req1 = "GET /req1 HTTP/1.1\r\nHost: api.openai.com\r\n\r\n";
+    tls_stream
+        .write_all(req1.as_bytes())
+        .await
+        .expect("write req1");
+
+    let mut resp1 = [0u8; 512];
+    let n1 = tls_stream.read(&mut resp1).await.expect("read resp1");
+    assert!(String::from_utf8_lossy(&resp1[..n1]).starts_with("HTTP/1.1 200 OK"));
+
+    // Wait 150ms before sending Request 2 over keep-alive connection
+    tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+
+    // Request 2
+    let req2 = "GET /req2 HTTP/1.1\r\nHost: api.openai.com\r\n\r\n";
+    tls_stream
+        .write_all(req2.as_bytes())
+        .await
+        .expect("write req2");
+
+    let mut resp2 = [0u8; 512];
+    let n2 = tls_stream.read(&mut resp2).await.expect("read resp2");
+    assert!(String::from_utf8_lossy(&resp2[..n2]).starts_with("HTTP/1.1 200 OK"));
+
+    // Wait for DB logger
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let logs = storage.fetch_recent_logs(10).await.expect("fetch logs");
+    assert_eq!(logs.len(), 2);
+    // Request 2 (most recent) should measure around 60ms latency, NOT 60+150+60 (tunnel duration)
+    let log_req2 = &logs[0];
+    let log_req1 = &logs[1];
+    assert!(
+        log_req2.latency_ms >= 50 && log_req2.latency_ms < 140,
+        "req2 latency was: {}",
+        log_req2.latency_ms
+    );
+    assert!(
+        log_req1.latency_ms >= 50 && log_req1.latency_ms < 140,
+        "req1 latency was: {}",
+        log_req1.latency_ms
+    );
+}

@@ -214,6 +214,25 @@ fn test_validation_pool_unknown_member() {
 }
 
 #[test]
+fn test_validation_duplicate_upstream_name() {
+    let json = r#"{
+        "upstreams": [
+            { "name": "direct-1", "kind": "direct" },
+            { "name": "direct-1", "kind": "direct" }
+        ],
+        "pools": {
+            "default": { "members": ["direct-1"] }
+        }
+    }"#;
+
+    let err = Config::from_json_str(json).unwrap_err();
+    match err {
+        ConfigError::Validation(msg) => assert!(msg.contains("Duplicate upstream name 'direct-1'")),
+        other => panic!("expected Validation error, got: {:?}", other),
+    }
+}
+
+#[test]
 fn test_from_file_success() {
     let json = r#"{
         "upstreams": [

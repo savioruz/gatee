@@ -217,7 +217,7 @@ async fn test_dashboard_render() {
             upstream: "upstream-1".to_string(),
             target_host: "api.openai.com:443".to_string(),
             is_mitm: true,
-            status_code: 200,
+            status_code: 201,
             latency_ms: 45,
         })
         .await
@@ -276,7 +276,7 @@ async fn test_dashboard_render() {
     assert!(html.contains("api.anthropic.com:443"));
     assert!(html.contains("45 ms"));
     assert!(html.contains("120 ms"));
-    assert!(html.contains("<span class=\"badge badge-green\">200</span>"));
+    assert!(html.contains("<span class=\"badge badge-green\">201</span>"));
     assert!(html.contains("<span class=\"badge badge-red\">502</span>"));
     assert!(html.contains("<a href=\"/ca.pem\" class=\"btn\" download>"));
 }

@@ -22,7 +22,6 @@ pub struct MitmContext {
     pub client: reqwest::Client,
     pub logger: LogEmitter,
     pub client_ip: SocketAddr,
-    pub start_time: Instant,
 }
 
 pub async fn handle_connect(
@@ -73,7 +72,6 @@ pub async fn handle_connect(
                 client: http_client,
                 logger,
                 client_ip,
-                start_time,
             };
             tokio::spawn(async move {
                 match hyper::upgrade::on(req).await {
@@ -136,6 +134,23 @@ pub async fn handle_connect(
                         }
                     }
                 }
+
+                // If all candidate upstreams fail to dial, emit a 502 RequestLogEntry to logger.record(...)
+                logger.record(RequestLogEntry {
+                    id: None,
+                    timestamp: chrono::Utc::now(),
+                    client_ip: client_ip.to_string(),
+                    pool: pool.name.clone(),
+                    upstream: candidates
+                        .first()
+                        .map(|u| u.name())
+                        .unwrap_or("none")
+                        .to_string(),
+                    target_host: format!("{}:{}", hostname, port),
+                    is_mitm: false,
+                    status_code: 502,
+                    latency_ms: start_time.elapsed().as_millis() as i64,
+                });
             }
             Err(e) => error!("Upgrade error: {}", e),
         }
@@ -172,7 +187,6 @@ async fn serve_mitm(io: TokioIo<hyper::upgrade::Upgraded>, ctx: MitmContext) {
     let logger = ctx.logger;
     let client_ip = ctx.client_ip;
     let hostname = ctx.hostname;
-    let start_time = ctx.start_time;
 
     let service = hyper::service::service_fn(move |req: Request<Incoming>| {
         let client = client.clone();
@@ -184,7 +198,28 @@ async fn serve_mitm(io: TokioIo<hyper::upgrade::Upgraded>, ctx: MitmContext) {
         let hostname = hostname.clone();
 
         async move {
+            let req_start = Instant::now();
             let (parts, incoming) = req.into_parts();
+
+            // Check for Upgrade: websocket header; if present, return 501 Not Implemented
+            if let Some(upgrade) = parts.headers.get(hyper::header::UPGRADE) {
+                if upgrade
+                    .to_str()
+                    .map(|s| {
+                        s.split(',')
+                            .any(|v| v.trim().eq_ignore_ascii_case("websocket"))
+                    })
+                    .unwrap_or(false)
+                {
+                    return Ok(Response::builder()
+                        .status(StatusCode::NOT_IMPLEMENTED)
+                        .body(Full::new(bytes::Bytes::from(
+                            "WebSocket is not supported over Vercel relay",
+                        )))
+                        .unwrap());
+                }
+            }
+
             let body_bytes = incoming
                 .collect()
                 .await
@@ -223,7 +258,7 @@ async fn serve_mitm(io: TokioIo<hyper::upgrade::Upgraded>, ctx: MitmContext) {
                         target_host: hostname,
                         is_mitm: true,
                         status_code: status.as_u16() as i32,
-                        latency_ms: start_time.elapsed().as_millis() as i64,
+                        latency_ms: req_start.elapsed().as_millis() as i64,
                     });
 
                     let mut builder = Response::builder().status(status);
@@ -236,6 +271,21 @@ async fn serve_mitm(io: TokioIo<hyper::upgrade::Upgraded>, ctx: MitmContext) {
                 }
                 Err(e) => {
                     error!("Relay error: {}", e);
+                    logger.record(RequestLogEntry {
+                        id: None,
+                        timestamp: chrono::Utc::now(),
+                        client_ip,
+                        pool: pool.name.clone(),
+                        upstream: relays
+                            .first()
+                            .map(|r| r.name())
+                            .unwrap_or("unknown")
+                            .to_string(),
+                        target_host: hostname,
+                        is_mitm: true,
+                        status_code: 502,
+                        latency_ms: req_start.elapsed().as_millis() as i64,
+                    });
                     Ok(Response::builder()
                         .status(StatusCode::BAD_GATEWAY)
                         .body(Full::new(bytes::Bytes::from("Bad Gateway")))
