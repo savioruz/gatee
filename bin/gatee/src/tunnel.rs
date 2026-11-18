@@ -125,6 +125,7 @@ pub async fn handle_connect(
                                 is_mitm: false,
                                 status_code: 200,
                                 latency_ms: start_time.elapsed().as_millis() as i64,
+                                created_by: "system".to_string(),
                             });
                             return;
                         }
@@ -150,6 +151,7 @@ pub async fn handle_connect(
                     is_mitm: false,
                     status_code: 502,
                     latency_ms: start_time.elapsed().as_millis() as i64,
+                    created_by: "system".to_string(),
                 });
             }
             Err(e) => error!("Upgrade error: {}", e),
@@ -259,6 +261,7 @@ async fn serve_mitm(io: TokioIo<hyper::upgrade::Upgraded>, ctx: MitmContext) {
                         is_mitm: true,
                         status_code: status.as_u16() as i32,
                         latency_ms: req_start.elapsed().as_millis() as i64,
+                        created_by: "system".to_string(),
                     });
 
                     let mut builder = Response::builder().status(status);
@@ -285,6 +288,7 @@ async fn serve_mitm(io: TokioIo<hyper::upgrade::Upgraded>, ctx: MitmContext) {
                         is_mitm: true,
                         status_code: 502,
                         latency_ms: req_start.elapsed().as_millis() as i64,
+                        created_by: "system".to_string(),
                     });
                     Ok(Response::builder()
                         .status(StatusCode::BAD_GATEWAY)

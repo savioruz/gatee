@@ -1,4 +1,4 @@
-use crate::db::{RequestLogEntry, Storage};
+use crate::{RequestLogEntry, Storage};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::error;

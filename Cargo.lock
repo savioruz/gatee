@@ -670,6 +670,7 @@ name = "gatee-storage"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "gatee-config",
  "libsql",
  "serde",
  "serde_json",

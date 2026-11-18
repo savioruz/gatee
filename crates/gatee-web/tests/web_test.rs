@@ -219,6 +219,7 @@ async fn test_dashboard_render() {
             is_mitm: true,
             status_code: 201,
             latency_ms: 45,
+            created_by: "system".to_string(),
         })
         .await
         .expect("insert log 1");
@@ -234,6 +235,7 @@ async fn test_dashboard_render() {
             is_mitm: false,
             status_code: 502,
             latency_ms: 120,
+            created_by: "system".to_string(),
         })
         .await
         .expect("insert log 2");
