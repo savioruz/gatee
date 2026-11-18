@@ -1,0 +1,22 @@
+# Rust build artifacts
+/target
+**/*.rs.bk
+
+# Databases & local data
+*.db
+*.db-wal
+*.db-shm
+data/
+
+# Sensitive keys & certs
+*.pem
+.env
+.env.*
+!.env.example
+
+# Docs (as requested by user)
+docs/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
