@@ -28,6 +28,31 @@ async fn setup_test_app(
     let ca = Arc::new(CertificateAuthority::load_or_generate(&cert_path, &key_path).expect("ca"));
 
     let storage = Storage::new_in_memory().await.expect("storage");
+    storage
+        .upsert_upstream("upstream-1", "direct", "", "test")
+        .await
+        .expect("insert upstream-1");
+    storage
+        .upsert_upstream("upstream-2", "http", "http://127.0.0.1:8080", "test")
+        .await
+        .expect("insert upstream-2");
+    storage
+        .upsert_pool(
+            &gatee_storage::PoolRecord {
+                name: "default".to_string(),
+                strategy: "round_robin".to_string(),
+                cooldown_secs: 30,
+                mitm_hosts: vec!["api.openai.com".to_string()],
+                members: vec!["upstream-1".to_string(), "upstream-2".to_string()],
+                created_at: String::new(),
+                modified_at: String::new(),
+                created_by: "test".to_string(),
+                modified_by: "test".to_string(),
+            },
+            "test",
+        )
+        .await
+        .expect("upsert default pool");
 
     let upstreams = vec![
         UpstreamCfg {
@@ -269,7 +294,7 @@ async fn test_dashboard_render() {
     assert!(html.contains("Total requests processed: <strong>1337</strong>"));
     assert!(html.contains("Upstream Pools"));
     assert!(html.contains("default"));
-    assert!(html.contains("roundrobin"));
+    assert!(html.contains("roundrobin") || html.contains("round_robin"));
     assert!(html.contains("upstream-1"));
     assert!(html.contains("upstream-2"));
     assert!(html.contains("Healthy"));
@@ -409,4 +434,168 @@ async fn test_auth_protects_all_endpoints() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_crud_upstream_endpoints() {
+    let (router, state, _storage, _ca) = setup_test_app("").await;
+
+    // Add new upstream
+    let body = "name=new-upstream&kind=direct&url=";
+    let resp = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/upstreams")
+                .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let html = body_to_string(resp.into_body()).await;
+    assert!(html.contains("new-upstream"));
+    assert!(state.get_upstream("new-upstream").is_some());
+
+    // Delete upstream
+    let resp = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/upstreams/new-upstream/delete")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(state.get_upstream("new-upstream").is_none());
+}
+
+#[tokio::test]
+async fn test_crud_pool_endpoints() {
+    let (router, state, _storage, _ca) = setup_test_app("").await;
+
+    // Add new pool
+    let body = "name=dynamic-pool&strategy=round_robin&cooldown_secs=45&members=upstream-1&mitm_hosts=api.openai.com";
+    let resp = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/pools")
+                .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let html = body_to_string(resp.into_body()).await;
+    assert!(html.contains("dynamic-pool"));
+    assert!(state.get_pool("dynamic-pool").is_some());
+
+    // Delete pool
+    let resp = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/pools/dynamic-pool/delete")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(state.get_pool("dynamic-pool").is_none());
+}
+
+#[tokio::test]
+async fn test_change_password_endpoint_and_dynamic_auth() {
+    let (router, _state, _storage, _ca) = setup_test_app("").await;
+
+    // Initially no password required
+    let resp = router
+        .clone()
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Update password
+    let body = "password=newsecret123";
+    let resp = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/password")
+                .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Now request without auth -> 401
+    let resp = router
+        .clone()
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+    // Request with new password -> 200 OK
+    let resp = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/")
+                .header(
+                    header::AUTHORIZATION,
+                    basic_auth_header("admin:newsecret123"),
+                )
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_live_logs_endpoint() {
+    let (router, _state, storage, _ca) = setup_test_app("").await;
+
+    storage
+        .insert_log(&RequestLogEntry::new(
+            "127.0.0.1".to_string(),
+            "default".to_string(),
+            "direct".to_string(),
+            "api.test.com:443".to_string(),
+            false,
+            200,
+            12,
+        ))
+        .await
+        .unwrap();
+
+    let resp = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/logs")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let html = body_to_string(resp.into_body()).await;
+    assert!(html.contains("api.test.com:443"));
 }
