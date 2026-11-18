@@ -1,4 +1,4 @@
-use gatee_config::{Config, ConfigError, PoolStrategy, UpstreamKind};
+use gatee_config::{Config, ConfigError, PoolCfg, PoolStrategy, UpstreamCfg, UpstreamKind};
 use std::io::Write;
 use tempfile::NamedTempFile;
 
@@ -268,4 +268,103 @@ fn test_json_syntax_error() {
         ConfigError::Json(_) => {}
         other => panic!("expected Json error, got: {:?}", other),
     }
+}
+
+#[test]
+fn test_upstream_kind_conversions() {
+    use std::str::FromStr;
+
+    assert_eq!(UpstreamKind::Direct.as_str(), "direct");
+    assert_eq!(UpstreamKind::Vercel.as_str(), "vercel");
+    assert_eq!(UpstreamKind::Http.as_str(), "http");
+    assert_eq!(UpstreamKind::Socks5.as_str(), "socks5");
+
+    assert_eq!(UpstreamKind::Direct.to_string(), "direct");
+    assert_eq!(UpstreamKind::Vercel.to_string(), "vercel");
+    assert_eq!(UpstreamKind::Http.to_string(), "http");
+    assert_eq!(UpstreamKind::Socks5.to_string(), "socks5");
+
+    assert_eq!(UpstreamKind::from_str("direct").unwrap(), UpstreamKind::Direct);
+    assert_eq!(UpstreamKind::from_str("DIRECT ").unwrap(), UpstreamKind::Direct);
+    assert_eq!(UpstreamKind::from_str("vercel").unwrap(), UpstreamKind::Vercel);
+    assert_eq!(UpstreamKind::from_str("http").unwrap(), UpstreamKind::Http);
+    assert_eq!(UpstreamKind::from_str("socks5").unwrap(), UpstreamKind::Socks5);
+
+    let err = UpstreamKind::from_str("unknown").unwrap_err();
+    match err {
+        ConfigError::Validation(msg) => assert!(msg.contains("Invalid upstream kind")),
+        other => panic!("expected Validation error, got: {:?}", other),
+    }
+}
+
+#[test]
+fn test_pool_strategy_conversions() {
+    use std::str::FromStr;
+
+    assert_eq!(PoolStrategy::RoundRobin.as_str(), "round_robin");
+    assert_eq!(PoolStrategy::Failover.as_str(), "failover");
+    assert_eq!(PoolStrategy::Sticky.as_str(), "sticky");
+
+    assert_eq!(PoolStrategy::RoundRobin.to_string(), "round_robin");
+    assert_eq!(PoolStrategy::Failover.to_string(), "failover");
+    assert_eq!(PoolStrategy::Sticky.to_string(), "sticky");
+
+    assert_eq!(PoolStrategy::from_str("round_robin").unwrap(), PoolStrategy::RoundRobin);
+    assert_eq!(PoolStrategy::from_str("roundrobin").unwrap(), PoolStrategy::RoundRobin);
+    assert_eq!(PoolStrategy::from_str("FAILOVER ").unwrap(), PoolStrategy::Failover);
+    assert_eq!(PoolStrategy::from_str("sticky").unwrap(), PoolStrategy::Sticky);
+
+    let err = PoolStrategy::from_str("invalid_strategy").unwrap_err();
+    match err {
+        ConfigError::Validation(msg) => assert!(msg.contains("Invalid pool strategy")),
+        other => panic!("expected Validation error, got: {:?}", other),
+    }
+}
+
+#[test]
+fn test_upstream_cfg_builder_and_validate() {
+    let u1 = UpstreamCfg::new("direct-1", UpstreamKind::Direct, "");
+    assert!(u1.validate().is_ok());
+
+    let u2 = UpstreamCfg::new("  ", UpstreamKind::Direct, "");
+    assert!(u2.validate().is_err());
+
+    let u3 = UpstreamCfg::new("vercel-1", UpstreamKind::Vercel, "");
+    assert!(u3.validate().is_err());
+
+    let u4 = UpstreamCfg::new("vercel-1", UpstreamKind::Vercel, "https://example.com");
+    assert!(u4.validate().is_ok());
+}
+
+#[test]
+fn test_pool_cfg_builder_and_validate() {
+    let pool = PoolCfg::new(
+        vec!["u1".to_string()],
+        PoolStrategy::RoundRobin,
+        vec!["example.com".to_string()],
+        15,
+    );
+    assert_eq!(pool.strategy, PoolStrategy::RoundRobin);
+    assert_eq!(pool.cooldown_secs, 15);
+    assert_eq!(pool.members, vec!["u1"]);
+    assert_eq!(pool.mitm_hosts, vec!["example.com"]);
+
+    let valid_set = ["u1"].into_iter().collect::<std::collections::HashSet<_>>();
+    assert!(pool.validate("pool1", |m| valid_set.contains(m)).is_ok());
+
+    let empty_pool = PoolCfg::default();
+    assert!(empty_pool.validate("pool2", |m| valid_set.contains(m)).is_err());
+
+    let unknown_pool = PoolCfg::new(vec!["u2".to_string()], PoolStrategy::Failover, vec![], 30);
+    assert!(unknown_pool.validate("pool3", |m| valid_set.contains(m)).is_err());
+}
+
+#[test]
+fn test_config_builder_and_defaults() {
+    let cfg = Config::new();
+    assert_eq!(cfg.listen, "127.0.0.1:7890");
+    assert_eq!(cfg.ca_cert, "ca.pem");
+    assert_eq!(cfg.ca_key, "ca-key.pem");
+    assert!(cfg.upstreams.is_empty());
+    assert!(cfg.pools.is_empty());
 }
