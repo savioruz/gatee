@@ -5,6 +5,36 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[lib]
+name = "gatee"
+path = "src/lib.rs"
+
 [[bin]]
 name = "gatee"
 path = "src/main.rs"
+
+[dependencies]
+gatee-config = { path = "../../crates/gatee-config" }
+gatee-core = { path = "../../crates/gatee-core" }
+gatee-ca = { path = "../../crates/gatee-ca" }
+gatee-proxy = { path = "../../crates/gatee-proxy" }
+gatee-storage = { path = "../../crates/gatee-storage" }
+gatee-web = { path = "../../crates/gatee-web" }
+tokio.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+http-body-util.workspace = true
+axum.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+base64.workspace = true
+chrono.workspace = true
+bytes.workspace = true
+tokio-rustls.workspace = true
+reqwest.workspace = true
+tower = { version = "0.5", features = ["util"] }
+
+[dev-dependencies]
+tempfile = "3.14"
