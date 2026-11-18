@@ -1,0 +1,38 @@
+# gatee — Docker Compose appliance example
+#
+# Runs the Gatee high-performance forward gateway & web dashboard in an isolated container.
+# Image is pulled directly from GitHub Container Registry (built via GitHub Actions):
+#
+#   docker compose -f contrib/docker-compose.yml up -d
+#   docker compose -f contrib/docker-compose.yml logs -f
+#
+# Volumes:
+#   - ../data:/data: Embedded libSQL database (gatee.db), CA certificates (ca.pem, ca.key.pem), and config.json
+
+services:
+  gatee:
+    image: ghcr.io/savioruz/gatee:latest
+    container_name: gatee
+    restart: unless-stopped
+    ports:
+      - "7890:7890"
+    environment:
+      GATEE_CONFIG: /data/config.json
+      GATEE_DB: /data/gatee.db
+      APP_TIMEZONE: Asia/Jakarta
+      RUST_LOG: gatee=info,gatee_web=info,gatee_core=info
+    volumes:
+      - ../data:/data
+
+  # Optional Cloudflare Tunnel sidecar for exposing Web Dashboard or bypassing CGNAT
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: gatee-tunnel
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - gatee
+    profiles:
+      - tunnel

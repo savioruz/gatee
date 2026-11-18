@@ -1,0 +1,17 @@
+[Unit]
+Description=Gatee High-Performance Modular Forward Gateway
+After=network.target
+
+[Service]
+Type=simple
+User=gatee
+Group=gatee
+WorkingDirectory=/opt/gatee
+ExecStart=/usr/local/bin/gatee --config /opt/gatee/config.json --db /opt/gatee/data/gatee.db
+Restart=always
+RestartSec=10
+EnvironmentFile=-/opt/gatee/.env
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
