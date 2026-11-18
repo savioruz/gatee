@@ -3,7 +3,7 @@ use gatee::run_server;
 use gatee_ca::CertificateAuthority;
 use gatee_config::{Config, PoolCfg, PoolStrategy, UpstreamCfg, UpstreamKind};
 use gatee_core::GatewayState;
-use gatee_storage::{LogEmitter, Storage};
+use gatee_storage::{LogEmitter, PoolRecord, Storage};
 use gatee_web::build_web_router;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -699,4 +699,107 @@ async fn test_mitm_per_request_latency() {
         "req1 latency was: {}",
         log_req1.latency_ms
     );
+}
+
+#[tokio::test]
+async fn test_dynamic_pool_creation_and_routing() {
+    let dir = tempdir().expect("tempdir");
+    let cert_path = dir.path().join("ca.pem");
+    let key_path = dir.path().join("ca-key.pem");
+    let ca = Arc::new(CertificateAuthority::load_or_generate(&cert_path, &key_path).expect("ca"));
+
+    let storage = Storage::new_in_memory().await.expect("storage");
+    storage
+        .ensure_seeded(Some("dynamicpass"))
+        .await
+        .expect("seed");
+
+    let logger = LogEmitter::new(storage.clone(), 64);
+    let state = Arc::new(
+        GatewayState::new_with_storage(storage.clone())
+            .await
+            .expect("state"),
+    );
+    let web_router = build_web_router(Arc::clone(&state), storage.clone(), Arc::clone(&ca));
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let server_addr = listener.local_addr().expect("local_addr");
+
+    let server_state = Arc::clone(&state);
+    let server_ca = Arc::clone(&ca);
+    tokio::spawn(async move {
+        let _ = run_server(listener, server_state, server_ca, web_router, logger).await;
+    });
+
+    // Mock target
+    let mock_target = TcpListener::bind("127.0.0.1:0").await.expect("bind mock");
+    let mock_addr = mock_target.local_addr().expect("mock addr");
+    tokio::spawn(async move {
+        while let Ok((mut stream, _)) = mock_target.accept().await {
+            tokio::spawn(async move {
+                let (mut r, mut w) = stream.split();
+                let _ = tokio::io::copy(&mut r, &mut w).await;
+            });
+        }
+    });
+
+    // 1. Initial request to non-existent custom pool should fail auth (407)
+    {
+        let mut client = TcpStream::connect(server_addr).await.expect("connect");
+        let auth = base64::prelude::BASE64_STANDARD.encode("new-pool:dynamicpass");
+        let req = format!(
+            "CONNECT {} HTTP/1.1\r\nHost: {}\r\nProxy-Authorization: Basic {}\r\n\r\n",
+            mock_addr, mock_addr, auth
+        );
+        client.write_all(req.as_bytes()).await.expect("write");
+        let mut buf = [0u8; 512];
+        let n = client.read(&mut buf).await.expect("read");
+        let resp = String::from_utf8_lossy(&buf[..n]);
+        assert!(resp.starts_with("HTTP/1.1 407 Proxy Authentication Required"));
+    }
+
+    // 2. Add upstream and new pool dynamically in storage, then hot-reload
+    storage
+        .upsert_upstream("dynamic-direct", "direct", "", "admin")
+        .await
+        .expect("upsert upstream");
+
+    let pool_record = PoolRecord {
+        name: "new-pool".to_string(),
+        strategy: "round_robin".to_string(),
+        cooldown_secs: 30,
+        mitm_hosts: vec![],
+        members: vec!["dynamic-direct".to_string()],
+        created_at: String::new(),
+        modified_at: String::new(),
+        created_by: String::new(),
+        modified_by: String::new(),
+    };
+    storage
+        .upsert_pool(&pool_record, "admin")
+        .await
+        .expect("upsert pool");
+
+    state.reload_from_storage().await.expect("hot reload");
+
+    // 3. Now request with "new-pool:dynamicpass" should succeed (200 OK) and tunnel
+    {
+        let mut client = TcpStream::connect(server_addr).await.expect("connect");
+        let auth = base64::prelude::BASE64_STANDARD.encode("new-pool:dynamicpass");
+        let req = format!(
+            "CONNECT {} HTTP/1.1\r\nHost: {}\r\nProxy-Authorization: Basic {}\r\n\r\n",
+            mock_addr, mock_addr, auth
+        );
+        client.write_all(req.as_bytes()).await.expect("write");
+        let mut buf = [0u8; 512];
+        let n = client.read(&mut buf).await.expect("read");
+        let resp = String::from_utf8_lossy(&buf[..n]);
+        assert!(resp.starts_with("HTTP/1.1 200 OK"));
+
+        let payload = b"Dynamic pool echo works!\n";
+        client.write_all(payload).await.expect("write payload");
+        let mut echo = vec![0u8; payload.len()];
+        client.read_exact(&mut echo).await.expect("read echo");
+        assert_eq!(&echo, payload);
+    }
 }

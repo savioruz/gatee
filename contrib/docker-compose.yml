@@ -7,7 +7,7 @@
 #   docker compose -f contrib/docker-compose.yml logs -f
 #
 # Volumes:
-#   - ../data:/data: Embedded libSQL database (gatee.db), CA certificates (ca.pem, ca.key.pem), and config.json
+#   - ../data:/data: Embedded libSQL database (gatee.db) and CA certificates (ca.pem, ca-key.pem)
 
 services:
   gatee:
@@ -17,8 +17,9 @@ services:
     ports:
       - "7890:7890"
     environment:
-      GATEE_CONFIG: /data/config.json
+      GATEE_LISTEN: 0.0.0.0:7890
       GATEE_DB: /data/gatee.db
+      GATEE_PASSWORD: ${GATEE_PASSWORD:-}
       APP_TIMEZONE: Asia/Jakarta
       RUST_LOG: gatee=info,gatee_web=info,gatee_core=info
     volumes:

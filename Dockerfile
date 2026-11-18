@@ -15,7 +15,7 @@ RUN apk add --no-cache ca-certificates tzdata && \
 
 COPY --from=builder /app/target/release/gatee /usr/local/bin/gatee
 
-ENV GATEE_CONFIG=/data/config.json
+ENV GATEE_LISTEN=0.0.0.0:7890
 ENV GATEE_DB=/data/gatee.db
 ENV APP_TIMEZONE=Asia/Jakarta
 
