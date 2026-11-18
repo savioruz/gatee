@@ -31,7 +31,7 @@ pub fn build_web_router(
     storage: Storage,
     ca: Arc<CertificateAuthority>,
 ) -> Router {
-    let password = state.config.password.clone();
+    let auth_state = Arc::clone(&state);
     let ctx = AppContext { state, storage, ca };
 
     Router::new()
@@ -39,7 +39,8 @@ pub fn build_web_router(
         .route("/ca.pem", get(ca_cert_handler))
         .route("/api/cooldown/reset", post(reset_cooldown_handler))
         .layer(middleware::from_fn(move |req, next| {
-            require_basic_auth(password.clone(), req, next)
+            let password = auth_state.password();
+            require_basic_auth(password, req, next)
         }))
         .with_state(ctx)
 }
@@ -67,9 +68,9 @@ async fn reset_cooldown_handler(
     State(ctx): State<AppContext>,
     Query(query): Query<ResetQuery>,
 ) -> Response {
-    if let Some(u) = ctx.state.upstreams.get(&query.upstream) {
+    if let Some(u) = ctx.state.get_upstream(&query.upstream) {
         u.reset_cooldown();
-        let markup = upstream_row(u, chrono::Utc::now().timestamp());
+        let markup = upstream_row(&u, chrono::Utc::now().timestamp());
         Html(markup.into_string()).into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()

@@ -47,7 +47,7 @@ async fn spawn_test_server(password: &str) -> (SocketAddr, Arc<GatewayState>, St
         pools,
     };
 
-    let state = Arc::new(GatewayState::new(config));
+    let state = Arc::new(GatewayState::new(config, storage.clone()));
     let web_router = build_web_router(Arc::clone(&state), storage.clone(), Arc::clone(&ca));
 
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
@@ -256,7 +256,7 @@ async fn test_connect_failover_marks_down() {
         pools,
     };
 
-    let state = Arc::new(GatewayState::new(config));
+    let state = Arc::new(GatewayState::new(config, storage.clone()));
     let web_router = build_web_router(Arc::clone(&state), storage.clone(), Arc::clone(&ca));
 
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
@@ -299,7 +299,7 @@ async fn test_connect_failover_marks_down() {
     assert_eq!(&echo, payload);
 
     // Verify dead-proxy was marked down
-    let dead_upstream = state.upstreams.get("dead-proxy").unwrap();
+    let dead_upstream = state.get_upstream("dead-proxy").unwrap();
     assert!(dead_upstream.is_down(chrono::Utc::now().timestamp()));
 }
 
@@ -338,7 +338,7 @@ async fn test_blind_tunnel_all_upstreams_fail_logs_502() {
         pools,
     };
 
-    let state = Arc::new(GatewayState::new(config));
+    let state = Arc::new(GatewayState::new(config, storage.clone()));
     let web_router = build_web_router(Arc::clone(&state), storage.clone(), Arc::clone(&ca));
 
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
@@ -428,7 +428,7 @@ async fn test_mitm_upgrade_websocket_returns_501() {
         pools,
     };
 
-    let state = Arc::new(GatewayState::new(config));
+    let state = Arc::new(GatewayState::new(config, storage.clone()));
     let web_router = build_web_router(Arc::clone(&state), storage.clone(), Arc::clone(&ca));
 
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
@@ -509,7 +509,7 @@ async fn test_mitm_relay_failure_logs_502() {
         pools,
     };
 
-    let state = Arc::new(GatewayState::new(config));
+    let state = Arc::new(GatewayState::new(config, storage.clone()));
     let web_router = build_web_router(Arc::clone(&state), storage.clone(), Arc::clone(&ca));
 
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
@@ -625,7 +625,7 @@ async fn test_mitm_per_request_latency() {
         pools,
     };
 
-    let state = Arc::new(GatewayState::new(config));
+    let state = Arc::new(GatewayState::new(config, storage.clone()));
     let web_router = build_web_router(Arc::clone(&state), storage.clone(), Arc::clone(&ca));
 
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");

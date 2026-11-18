@@ -7,8 +7,13 @@ license.workspace = true
 
 [dependencies]
 gatee-config = { path = "../gatee-config" }
+gatee-storage = { path = "../gatee-storage" }
+arc-swap.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
 subtle.workspace = true
 tracing.workspace = true
 chrono.workspace = true
+
+[dev-dependencies]
+tempfile = "3.14"

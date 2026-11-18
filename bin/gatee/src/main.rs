@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
 
     let storage = Storage::new_from_path(&cli.db).await?;
     let logger = LogEmitter::new(storage.clone(), 4096);
-    let state = Arc::new(GatewayState::new(config.clone()));
+    let state = Arc::new(GatewayState::new(config.clone(), storage.clone()));
 
     let web_router = build_web_router(Arc::clone(&state), storage, Arc::clone(&ca));
 

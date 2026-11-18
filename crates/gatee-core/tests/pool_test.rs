@@ -1,5 +1,6 @@
 use gatee_config::{Config, PoolCfg, PoolStrategy, UpstreamCfg, UpstreamKind};
 use gatee_core::{fnv32a, CoreError, GatewayState, PoolRuntime, UpstreamRuntime};
+use gatee_storage::Storage;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -181,8 +182,8 @@ fn test_mitm_host_matching() {
     assert!(!pool.mitms("openai.com"));
 }
 
-#[test]
-fn test_gateway_state_auth_and_pool_resolution() {
+#[tokio::test]
+async fn test_gateway_state_auth_and_pool_resolution() {
     let u1 = UpstreamCfg {
         name: "u1".to_string(),
         kind: UpstreamKind::Direct,
@@ -217,7 +218,8 @@ fn test_gateway_state_auth_and_pool_resolution() {
         pools,
     };
 
-    let state = GatewayState::new(config);
+    let storage = Storage::new_in_memory().await.unwrap();
+    let state = GatewayState::new(config, storage);
 
     // Auth failure with wrong password
     let err = state.authenticate("default", "wrong_pass").unwrap_err();
@@ -283,8 +285,8 @@ fn test_gateway_state_auth_and_pool_resolution() {
     );
 }
 
-#[test]
-fn test_gateway_state_no_password_required() {
+#[tokio::test]
+async fn test_gateway_state_no_password_required() {
     let u1 = UpstreamCfg {
         name: "u1".to_string(),
         kind: UpstreamKind::Direct,
@@ -310,7 +312,8 @@ fn test_gateway_state_no_password_required() {
         pools,
     };
 
-    let state = GatewayState::new(config);
+    let storage = Storage::new_in_memory().await.unwrap();
+    let state = GatewayState::new(config, storage);
 
     // Any password or empty password should be accepted
     assert!(state.authenticate("default", "").is_ok());

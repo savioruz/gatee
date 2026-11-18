@@ -28,8 +28,16 @@ impl UpstreamRuntime {
         &self.cfg.url
     }
 
+    pub fn config(&self) -> &UpstreamCfg {
+        &self.cfg
+    }
+
     pub fn is_down(&self, now_sec: i64) -> bool {
         self.down_until.load(Ordering::Relaxed) > now_sec
+    }
+
+    pub fn is_down_now(&self) -> bool {
+        self.is_down(Utc::now().timestamp())
     }
 
     pub fn mark_down(&self, cooldown_secs: u64) {

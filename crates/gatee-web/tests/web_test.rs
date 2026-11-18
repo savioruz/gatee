@@ -62,7 +62,7 @@ async fn setup_test_app(
         pools,
     };
 
-    let state = Arc::new(GatewayState::new(config));
+    let state = Arc::new(GatewayState::new(config, storage.clone()));
     let router = build_web_router(Arc::clone(&state), storage.clone(), Arc::clone(&ca));
 
     (router, state, storage, ca)
@@ -317,8 +317,7 @@ async fn test_cooldown_reset_endpoint() {
     let (router, state, _storage, _ca) = setup_test_app("").await;
 
     let upstream = state
-        .upstreams
-        .get("upstream-1")
+        .get_upstream("upstream-1")
         .expect("upstream-1 exists");
 
     // Put upstream-1 in cooldown for 120 seconds

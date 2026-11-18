@@ -71,7 +71,8 @@ pub fn dashboard_page(state: &GatewayState, recent_logs: &[RequestLogEntry]) -> 
     let now = Utc::now().timestamp();
     let total_reqs = state.total_requests.load(Ordering::Relaxed);
 
-    let mut pools: Vec<_> = state.pools.iter().collect();
+    let pools_map = state.pools();
+    let mut pools: Vec<_> = pools_map.iter().collect();
     pools.sort_by_key(|(name, _)| *name);
 
     layout(
