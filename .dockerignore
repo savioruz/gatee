@@ -1,0 +1,9 @@
+target/
+.git/
+.superpowers/
+docs/
+data/
+*.db
+*.db-*
+*.pem
+.env*

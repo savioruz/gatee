@@ -1,0 +1,22 @@
+services:
+  gatee:
+    build: .
+    container_name: gatee
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    environment:
+      - GATEE_CONFIG=/data/config.json
+      - GATEE_DB=/data/gatee.db
+    ports:
+      - "7890:7890"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: gatee-tunnel
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - gatee
