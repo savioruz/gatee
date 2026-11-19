@@ -802,4 +802,19 @@ async fn test_dynamic_pool_creation_and_routing() {
         client.read_exact(&mut echo).await.expect("read echo");
         assert_eq!(&echo, payload);
     }
+
+    // 4. Request with "admin:dynamicpass" should route to "default" pool
+    {
+        let mut client = TcpStream::connect(server_addr).await.expect("connect");
+        let auth = base64::prelude::BASE64_STANDARD.encode("admin:dynamicpass");
+        let req = format!(
+            "CONNECT {} HTTP/1.1\r\nHost: {}\r\nProxy-Authorization: Basic {}\r\n\r\n",
+            mock_addr, mock_addr, auth
+        );
+        client.write_all(req.as_bytes()).await.expect("write");
+        let mut buf = [0u8; 512];
+        let n = client.read(&mut buf).await.expect("read");
+        let resp = String::from_utf8_lossy(&buf[..n]);
+        assert!(resp.starts_with("HTTP/1.1 200 OK"));
+    }
 }

@@ -318,4 +318,6 @@ async fn test_gateway_state_no_password_required() {
     // Any password or empty password should be accepted
     assert!(state.authenticate("default", "").is_ok());
     assert!(state.authenticate("default", "anything").is_ok());
+    assert!(state.authenticate("admin", "").is_ok());
+    assert!(state.authenticate("admin", "anything").is_ok());
 }

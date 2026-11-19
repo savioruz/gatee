@@ -183,6 +183,13 @@ impl GatewayState {
         let pool = router
             .pools
             .get(pool_name)
+            .or_else(|| {
+                if pool_name == "admin" {
+                    router.pools.get("default")
+                } else {
+                    None
+                }
+            })
             .ok_or_else(|| CoreError::PoolNotFound(pool_name.to_string()))?;
 
         let key = if sticky_key.is_empty() {
