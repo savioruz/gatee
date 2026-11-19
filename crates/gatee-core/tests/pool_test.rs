@@ -119,8 +119,8 @@ fn test_failover_and_cooldown_filtering() {
 
     // Mark u1 down
     pool.mark_down(&u1);
-    assert!(u1.is_down(chrono::Utc::now().timestamp()));
-    assert!(u1.remaining_cooldown_secs(chrono::Utc::now().timestamp()) > 0);
+    assert!(u1.is_down(time::OffsetDateTime::now_utc().unix_timestamp()));
+    assert!(u1.remaining_cooldown_secs(time::OffsetDateTime::now_utc().unix_timestamp()) > 0);
 
     // Next selection should move u1 to the end (cooling fallback)
     let cands_failover = pool.candidates("");
@@ -138,7 +138,7 @@ fn test_failover_and_cooldown_filtering() {
 
     // Reset u1 cooldown
     u1.reset_cooldown();
-    assert!(!u1.is_down(chrono::Utc::now().timestamp()));
+    assert!(!u1.is_down(time::OffsetDateTime::now_utc().unix_timestamp()));
     let cands_recovered = pool.candidates("");
     assert_eq!(cands_recovered[0].name(), "u1");
     assert_eq!(cands_recovered[1].name(), "u3");

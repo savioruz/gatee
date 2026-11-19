@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use gatee_config::{Config, PoolCfg, PoolStrategy, UpstreamCfg, UpstreamKind};
 use std::collections::HashMap;
 use std::path::Path;
@@ -121,12 +120,17 @@ impl Storage {
             &entry.created_by
         };
 
+        let ts_str = entry
+            .timestamp
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default();
+
         self.conn
             .execute(
                 "INSERT INTO request_logs (created_at, client_ip, pool, upstream, target_host, is_mitm, status_code, latency_ms, created_by)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 libsql::params![
-                    entry.timestamp.to_rfc3339(),
+                    ts_str,
                     entry.client_ip.clone(),
                     entry.pool.clone(),
                     entry.upstream.clone(),
@@ -157,9 +161,11 @@ impl Storage {
         let mut results = Vec::new();
         while let Some(row) = rows.next().await? {
             let ts_str: String = row.get(1)?;
-            let ts = DateTime::parse_from_rfc3339(&ts_str)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|_| Utc::now());
+            let ts = time::OffsetDateTime::parse(
+                &ts_str,
+                &time::format_description::well_known::Rfc3339,
+            )
+            .unwrap_or_else(|_| time::OffsetDateTime::now_utc());
 
             results.push(RequestLogEntry {
                 id: Some(row.get(0)?),

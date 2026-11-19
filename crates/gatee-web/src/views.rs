@@ -1,8 +1,8 @@
-use chrono::Utc;
 use gatee_core::GatewayState;
 use gatee_storage::{PoolRecord, RequestLogEntry, UpstreamRecord};
 use maud::{html, Markup, DOCTYPE};
 use std::sync::atomic::Ordering;
+use time::OffsetDateTime;
 
 pub fn layout(title: &str, content: Markup) -> Markup {
     html! {
@@ -283,7 +283,7 @@ pub fn logs_table_rows(recent_logs: &[RequestLogEntry]) -> Markup {
     html! {
         @for log in recent_logs {
             tr {
-                td { (log.timestamp.format("%H:%M:%S").to_string()) }
+                td { (format!("{:02}:{:02}:{:02}", log.timestamp.hour(), log.timestamp.minute(), log.timestamp.second())) }
                 td { code { (log.target_host) } }
                 td { (log.pool) }
                 td { (log.upstream) }
@@ -307,7 +307,7 @@ pub fn dashboard_page(
     recent_logs: &[RequestLogEntry],
     password_msg: Option<&str>,
 ) -> Markup {
-    let now = Utc::now().timestamp();
+    let now = OffsetDateTime::now_utc().unix_timestamp();
     let total_reqs = state.total_requests.load(Ordering::Relaxed);
     let is_protected = !state.password().is_empty();
 

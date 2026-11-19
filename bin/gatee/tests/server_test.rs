@@ -300,7 +300,7 @@ async fn test_connect_failover_marks_down() {
 
     // Verify dead-proxy was marked down
     let dead_upstream = state.get_upstream("dead-proxy").unwrap();
-    assert!(dead_upstream.is_down(chrono::Utc::now().timestamp()));
+    assert!(dead_upstream.is_down(time::OffsetDateTime::now_utc().unix_timestamp()));
 }
 
 #[tokio::test]

@@ -1,6 +1,6 @@
-use chrono::Utc;
 use gatee_config::{UpstreamCfg, UpstreamKind};
 use std::sync::atomic::{AtomicI64, Ordering};
+use time::OffsetDateTime;
 
 #[derive(Debug)]
 pub struct UpstreamRuntime {
@@ -37,11 +37,11 @@ impl UpstreamRuntime {
     }
 
     pub fn is_down_now(&self) -> bool {
-        self.is_down(Utc::now().timestamp())
+        self.is_down(OffsetDateTime::now_utc().unix_timestamp())
     }
 
     pub fn mark_down(&self, cooldown_secs: u64) {
-        let until = Utc::now().timestamp() + cooldown_secs as i64;
+        let until = OffsetDateTime::now_utc().unix_timestamp() + cooldown_secs as i64;
         self.down_until.store(until, Ordering::Relaxed);
     }
 

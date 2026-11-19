@@ -1,6 +1,6 @@
-use chrono::Utc;
 use gatee_storage::{LogEmitter, PoolRecord, RequestLogEntry, Storage};
 use tempfile::tempdir;
+use time::OffsetDateTime;
 
 #[tokio::test]
 async fn test_storage_migrate_and_log() {
@@ -282,7 +282,7 @@ async fn test_log_emitter_channel_saturation() {
     for i in 0..50 {
         emitter.record(RequestLogEntry {
             id: None,
-            timestamp: Utc::now(),
+            timestamp: OffsetDateTime::now_utc(),
             client_ip: "127.0.0.1".to_string(),
             pool: "default".to_string(),
             upstream: "direct".to_string(),

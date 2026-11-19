@@ -1,9 +1,9 @@
 use crate::upstream::UpstreamRuntime;
-use chrono::Utc;
 use gatee_config::{PoolCfg, PoolStrategy};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use time::OffsetDateTime;
 
 #[derive(Debug)]
 pub struct PoolRuntime {
@@ -59,7 +59,7 @@ impl PoolRuntime {
             PoolStrategy::Failover => 0,
         };
 
-        let now = Utc::now().timestamp();
+        let now = OffsetDateTime::now_utc().unix_timestamp();
         let mut healthy = Vec::with_capacity(n);
         let mut cooling = Vec::with_capacity(n);
 

@@ -1,7 +1,6 @@
 use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
 use base64::Engine;
-use chrono::Utc;
 use gatee_ca::CertificateAuthority;
 use gatee_config::{Config, PoolCfg, PoolStrategy, UpstreamCfg, UpstreamKind};
 use gatee_core::GatewayState;
@@ -12,6 +11,7 @@ use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tempfile::tempdir;
+use time::OffsetDateTime;
 use tower::ServiceExt;
 
 async fn setup_test_app(
@@ -232,7 +232,7 @@ async fn test_dashboard_render() {
     state.total_requests.store(1337, Ordering::Relaxed);
 
     // Insert request logs
-    let now = Utc::now();
+    let now = OffsetDateTime::now_utc();
     storage
         .insert_log(&RequestLogEntry {
             id: None,
@@ -345,7 +345,7 @@ async fn test_cooldown_reset_endpoint() {
 
     // Put upstream-1 in cooldown for 120 seconds
     upstream.mark_down(120);
-    let now = Utc::now().timestamp();
+    let now = OffsetDateTime::now_utc().unix_timestamp();
     assert!(upstream.is_down(now));
     assert!(upstream.remaining_cooldown_secs(now) > 0);
 
@@ -383,7 +383,7 @@ async fn test_cooldown_reset_endpoint() {
     assert!(row_html.contains("hx-swap=\"outerHTML\""));
 
     // Upstream cooldown is cleared
-    let now_after = Utc::now().timestamp();
+    let now_after = OffsetDateTime::now_utc().unix_timestamp();
     assert!(!upstream.is_down(now_after));
     assert_eq!(upstream.remaining_cooldown_secs(now_after), 0);
 

@@ -1,4 +1,3 @@
-use chrono::{DateTime, Duration, Utc};
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair, KeyUsagePurpose,
 };
@@ -6,6 +5,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
+use time::{Duration, OffsetDateTime};
 use tracing::info;
 
 #[derive(Error, Debug)]
@@ -20,7 +20,7 @@ pub enum CaError {
 
 struct CachedLeaf {
     config: Arc<rustls::ServerConfig>,
-    expires: DateTime<Utc>,
+    expires: OffsetDateTime,
 }
 
 pub struct CertificateAuthority {
@@ -92,7 +92,7 @@ impl CertificateAuthority {
 
     pub fn server_config_for(&self, hostname: &str) -> Result<Arc<rustls::ServerConfig>, CaError> {
         let host = hostname.to_lowercase();
-        let now = Utc::now();
+        let now = OffsetDateTime::now_utc();
 
         {
             let cache_read = self

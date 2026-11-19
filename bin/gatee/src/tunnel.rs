@@ -117,7 +117,7 @@ pub async fn handle_connect(
                             let _ = copy_bidirectional(&mut client_io, &mut upstream_io).await;
                             logger.record(RequestLogEntry {
                                 id: None,
-                                timestamp: chrono::Utc::now(),
+                                timestamp: time::OffsetDateTime::now_utc(),
                                 client_ip: client_ip.to_string(),
                                 pool: pool.name.clone(),
                                 upstream: u.name().to_string(),
@@ -139,7 +139,7 @@ pub async fn handle_connect(
                 // If all candidate upstreams fail to dial, emit a 502 RequestLogEntry to logger.record(...)
                 logger.record(RequestLogEntry {
                     id: None,
-                    timestamp: chrono::Utc::now(),
+                    timestamp: time::OffsetDateTime::now_utc(),
                     client_ip: client_ip.to_string(),
                     pool: pool.name.clone(),
                     upstream: candidates
@@ -249,7 +249,7 @@ async fn serve_mitm(io: TokioIo<hyper::upgrade::Upgraded>, ctx: MitmContext) {
 
                     logger.record(RequestLogEntry {
                         id: None,
-                        timestamp: chrono::Utc::now(),
+                        timestamp: time::OffsetDateTime::now_utc(),
                         client_ip,
                         pool: pool.name.clone(),
                         upstream: relays
@@ -276,7 +276,7 @@ async fn serve_mitm(io: TokioIo<hyper::upgrade::Upgraded>, ctx: MitmContext) {
                     error!("Relay error: {}", e);
                     logger.record(RequestLogEntry {
                         id: None,
-                        timestamp: chrono::Utc::now(),
+                        timestamp: time::OffsetDateTime::now_utc(),
                         client_ip,
                         pool: pool.name.clone(),
                         upstream: relays

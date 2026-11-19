@@ -1,5 +1,5 @@
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 
 fn default_created_by() -> String {
     "system".to_string()
@@ -8,8 +8,8 @@ fn default_created_by() -> String {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestLogEntry {
     pub id: Option<i64>,
-    #[serde(alias = "created_at")]
-    pub timestamp: DateTime<Utc>,
+    #[serde(alias = "created_at", with = "time::serde::rfc3339")]
+    pub timestamp: OffsetDateTime,
     pub client_ip: String,
     pub pool: String,
     pub upstream: String,
@@ -34,7 +34,7 @@ impl RequestLogEntry {
     ) -> Self {
         Self {
             id: None,
-            timestamp: Utc::now(),
+            timestamp: OffsetDateTime::now_utc(),
             client_ip,
             pool,
             upstream,

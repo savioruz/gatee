@@ -117,7 +117,8 @@ async fn reset_cooldown_handler(
 ) -> Response {
     if let Some(u) = ctx.state.get_upstream(&query.upstream) {
         u.reset_cooldown();
-        let markup = crate::views::upstream_row(&u, chrono::Utc::now().timestamp());
+        let markup =
+            crate::views::upstream_row(&u, time::OffsetDateTime::now_utc().unix_timestamp());
         Html(markup.into_string()).into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()
@@ -128,7 +129,7 @@ async fn add_upstream_handler(
     State(ctx): State<AppContext>,
     Form(form): Form<AddUpstreamForm>,
 ) -> impl IntoResponse {
-    let now = chrono::Utc::now().timestamp();
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
     if let Err(e) = ctx
         .storage
         .upsert_upstream(form.name.trim(), form.kind.trim(), form.url.trim(), "admin")
@@ -149,7 +150,7 @@ async fn delete_upstream_handler(
     State(ctx): State<AppContext>,
     Path(name): Path<String>,
 ) -> impl IntoResponse {
-    let now = chrono::Utc::now().timestamp();
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
     if let Err(e) = ctx.storage.delete_upstream(&name).await {
         return (
             StatusCode::BAD_REQUEST,
@@ -166,7 +167,7 @@ async fn add_pool_handler(
     State(ctx): State<AppContext>,
     Form(form): Form<AddPoolForm>,
 ) -> impl IntoResponse {
-    let now = chrono::Utc::now().timestamp();
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let members: Vec<String> = form
         .members
         .split(',')
@@ -209,7 +210,7 @@ async fn delete_pool_handler(
     State(ctx): State<AppContext>,
     Path(name): Path<String>,
 ) -> impl IntoResponse {
-    let now = chrono::Utc::now().timestamp();
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
     if let Err(e) = ctx.storage.delete_pool(&name).await {
         return (
             StatusCode::BAD_REQUEST,
