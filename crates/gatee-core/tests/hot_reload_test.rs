@@ -49,9 +49,7 @@ async fn test_hot_reload_adds_new_pool() {
     assert_eq!(pool.members.len(), 1);
 
     // Can authenticate against new pool
-    let (auth_pool, _) = state
-        .authenticate("new-pool", "")
-        .expect("auth new pool");
+    let (auth_pool, _) = state.authenticate("new-pool", "").expect("auth new pool");
     assert_eq!(auth_pool.name, "new-pool");
 }
 
@@ -77,12 +75,7 @@ async fn test_hot_reload_preserves_cooldown_timestamp() {
 
     // Add a second upstream and pool in SQLite
     storage
-        .upsert_upstream(
-            "socks-proxy",
-            "socks5",
-            "socks5://127.0.0.1:1080",
-            "test",
-        )
+        .upsert_upstream("socks-proxy", "socks5", "socks5://127.0.0.1:1080", "test")
         .await
         .expect("add socks-proxy");
 

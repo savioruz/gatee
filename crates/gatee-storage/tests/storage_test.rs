@@ -154,12 +154,7 @@ async fn test_storage_pool_crud() {
 
     // Add another upstream
     storage
-        .upsert_upstream(
-            "socks5-node",
-            "socks5",
-            "socks5://127.0.0.1:1080",
-            "system",
-        )
+        .upsert_upstream("socks5-node", "socks5", "socks5://127.0.0.1:1080", "system")
         .await
         .expect("add socks5");
 

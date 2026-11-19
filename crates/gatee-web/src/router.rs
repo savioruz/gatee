@@ -71,7 +71,10 @@ pub fn build_web_router(
         .route("/api/logs", get(logs_handler))
         .route("/api/cooldown/reset", post(reset_cooldown_handler))
         .route("/api/upstreams", post(add_upstream_handler))
-        .route("/api/upstreams/{name}/delete", post(delete_upstream_handler))
+        .route(
+            "/api/upstreams/{name}/delete",
+            post(delete_upstream_handler),
+        )
         .route("/api/pools", post(add_pool_handler))
         .route("/api/pools/{name}/delete", post(delete_pool_handler))
         .route("/api/settings/password", post(change_password_handler))
@@ -128,12 +131,7 @@ async fn add_upstream_handler(
     let now = chrono::Utc::now().timestamp();
     if let Err(e) = ctx
         .storage
-        .upsert_upstream(
-            form.name.trim(),
-            form.kind.trim(),
-            form.url.trim(),
-            "admin",
-        )
+        .upsert_upstream(form.name.trim(), form.kind.trim(), form.url.trim(), "admin")
         .await
     {
         return (

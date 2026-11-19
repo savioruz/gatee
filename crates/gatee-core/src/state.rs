@@ -162,10 +162,7 @@ impl GatewayState {
     ) -> Result<(Arc<PoolRuntime>, String), CoreError> {
         let router = self.router.load();
         if !router.password.is_empty() {
-            let pass_match: bool = password
-                .as_bytes()
-                .ct_eq(router.password.as_bytes())
-                .into();
+            let pass_match: bool = password.as_bytes().ct_eq(router.password.as_bytes()).into();
             if !pass_match {
                 return Err(CoreError::AuthFailed);
             }

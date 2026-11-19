@@ -383,11 +383,7 @@ impl Storage {
         }
     }
 
-    pub async fn upsert_pool(
-        &self,
-        pool: &PoolRecord,
-        actor: &str,
-    ) -> Result<(), StorageError> {
+    pub async fn upsert_pool(&self, pool: &PoolRecord, actor: &str) -> Result<(), StorageError> {
         let strat_enum = PoolStrategy::from_str(&pool.strategy)?;
         let pool_cfg = PoolCfg::new(
             pool.members.clone(),

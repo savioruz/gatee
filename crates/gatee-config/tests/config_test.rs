@@ -284,11 +284,23 @@ fn test_upstream_kind_conversions() {
     assert_eq!(UpstreamKind::Http.to_string(), "http");
     assert_eq!(UpstreamKind::Socks5.to_string(), "socks5");
 
-    assert_eq!(UpstreamKind::from_str("direct").unwrap(), UpstreamKind::Direct);
-    assert_eq!(UpstreamKind::from_str("DIRECT ").unwrap(), UpstreamKind::Direct);
-    assert_eq!(UpstreamKind::from_str("vercel").unwrap(), UpstreamKind::Vercel);
+    assert_eq!(
+        UpstreamKind::from_str("direct").unwrap(),
+        UpstreamKind::Direct
+    );
+    assert_eq!(
+        UpstreamKind::from_str("DIRECT ").unwrap(),
+        UpstreamKind::Direct
+    );
+    assert_eq!(
+        UpstreamKind::from_str("vercel").unwrap(),
+        UpstreamKind::Vercel
+    );
     assert_eq!(UpstreamKind::from_str("http").unwrap(), UpstreamKind::Http);
-    assert_eq!(UpstreamKind::from_str("socks5").unwrap(), UpstreamKind::Socks5);
+    assert_eq!(
+        UpstreamKind::from_str("socks5").unwrap(),
+        UpstreamKind::Socks5
+    );
 
     let err = UpstreamKind::from_str("unknown").unwrap_err();
     match err {
@@ -309,10 +321,22 @@ fn test_pool_strategy_conversions() {
     assert_eq!(PoolStrategy::Failover.to_string(), "failover");
     assert_eq!(PoolStrategy::Sticky.to_string(), "sticky");
 
-    assert_eq!(PoolStrategy::from_str("round_robin").unwrap(), PoolStrategy::RoundRobin);
-    assert_eq!(PoolStrategy::from_str("roundrobin").unwrap(), PoolStrategy::RoundRobin);
-    assert_eq!(PoolStrategy::from_str("FAILOVER ").unwrap(), PoolStrategy::Failover);
-    assert_eq!(PoolStrategy::from_str("sticky").unwrap(), PoolStrategy::Sticky);
+    assert_eq!(
+        PoolStrategy::from_str("round_robin").unwrap(),
+        PoolStrategy::RoundRobin
+    );
+    assert_eq!(
+        PoolStrategy::from_str("roundrobin").unwrap(),
+        PoolStrategy::RoundRobin
+    );
+    assert_eq!(
+        PoolStrategy::from_str("FAILOVER ").unwrap(),
+        PoolStrategy::Failover
+    );
+    assert_eq!(
+        PoolStrategy::from_str("sticky").unwrap(),
+        PoolStrategy::Sticky
+    );
 
     let err = PoolStrategy::from_str("invalid_strategy").unwrap_err();
     match err {
@@ -353,10 +377,14 @@ fn test_pool_cfg_builder_and_validate() {
     assert!(pool.validate("pool1", |m| valid_set.contains(m)).is_ok());
 
     let empty_pool = PoolCfg::default();
-    assert!(empty_pool.validate("pool2", |m| valid_set.contains(m)).is_err());
+    assert!(empty_pool
+        .validate("pool2", |m| valid_set.contains(m))
+        .is_err());
 
     let unknown_pool = PoolCfg::new(vec!["u2".to_string()], PoolStrategy::Failover, vec![], 30);
-    assert!(unknown_pool.validate("pool3", |m| valid_set.contains(m)).is_err());
+    assert!(unknown_pool
+        .validate("pool3", |m| valid_set.contains(m))
+        .is_err());
 }
 
 #[test]

@@ -341,9 +341,7 @@ async fn test_ca_cert_download() {
 async fn test_cooldown_reset_endpoint() {
     let (router, state, _storage, _ca) = setup_test_app("").await;
 
-    let upstream = state
-        .get_upstream("upstream-1")
-        .expect("upstream-1 exists");
+    let upstream = state.get_upstream("upstream-1").expect("upstream-1 exists");
 
     // Put upstream-1 in cooldown for 120 seconds
     upstream.mark_down(120);
